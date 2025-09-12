@@ -1,0 +1,74 @@
+CREATE OR REPLACE FUNCTION fetch_bbs_info_with_count(
+    p_sites      TEXT[],
+    p_keyword    TEXT,
+    p_page_index INTEGER,
+    p_page_count INTEGER,
+    p_time_bucket INTERVAL
+)
+RETURNS TABLE (
+    no          INT,
+    title       VARCHAR,
+    content     VARCHAR,
+    likes       INT,
+    views       INT,
+    reply_num   INT,
+    posted_dt   TIMESTAMP,
+    url         VARCHAR
+) AS $$
+BEGIN
+    -- 1. 페이징된 결과셋
+    RETURN QUERY
+    SELECT no, title, content, likes, views, reply_num,
+           posted_dt, url
+      FROM site_bbs_info
+     WHERE (p_sites IS NULL OR site_name = ANY(p_sites))
+       AND (p_keyword IS NULL OR title ILIKE '%' || p_keyword || '%')
+       AND posted_dt >= now() - p_time_bucket
+     ORDER BY posted_dt DESC
+     LIMIT  p_page_count OFFSET (p_page_index-1)*p_page_count;
+END; $$ LANGUAGE plpgsql STABLE;
+
+-- 2. 전체 count 를 별도 SELECT 로 반환
+CREATE OR REPLACE FUNCTION fetch_bbs_info_total_cnt(
+    p_sites      TEXT[],
+    p_keyword    TEXT,
+    p_time_bucket INTERVAL
+)
+RETURNS BIGINT AS $$
+BEGIN
+    RETURN (
+        SELECT COUNT(*) FROM site_bbs_info
+        WHERE (p_sites IS NULL OR site_name = ANY(p_sites))
+          AND (p_keyword IS NULL OR title ILIKE '%' || p_keyword || '%')
+          AND posted_dt >= now() - p_time_bucket
+    );
+END; $$ LANGUAGE plpgsql STABLE;
+
+var parameters = new DynamicParameters();
+parameters.Add("@p_sites", sitesArray);
+parameters.Add("@p_keyword", keyword);
+parameters.Add("@p_page_index", pageIndex);
+parameters.Add("@p_page_count", pageCount);
+parameters.Add("@p_time_bucket", timeBucket);
+
+using var conn = new NpgsqlConnection(connectionString);
+
+// 1. 페이징 결과 + count 를 한 번에 가져오기
+var result = await conn.QueryMultipleAsync(
+    sql: @"
+        SELECT * FROM fetch_bbs_info_with_count(@p_sites, @p_keyword,
+                                                @p_page_index, @p_page_count,
+                                                @p_time_bucket);
+
+        SELECT fetch_bbs_info_total_cnt(@p_sites, @p_keyword, @p_time_bucket) AS total;
+    ",
+    param: parameters
+);
+
+var list = await result.ReadAsync<BbsInfoDto>();
+var totalCount = (await result.ReadSingleAsync<long>()).total;
+
+// or, if you prefer two separate calls:
+var list  = await conn.QueryAsync<BbsInfoDto>("fetch_bbs_info_with_count", parameters);
+var count = await conn.ExecuteScalarAsync<long>("fetch_bbs_info_total_cnt", parameters);
+
