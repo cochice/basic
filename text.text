@@ -1,3 +1,453 @@
+// 파일명: ManseCalendarIntegrated.cs
+// 플랫폼: .NET 6+ (콘솔 앱)
+// 설명: 입력(현지 날짜+시간+오프셋) -> 음력, 연/월/일/시 간지, 가장 가까운 절기 및 절기 시각 (UTC/Local)
+
+using System;
+using System.Globalization;
+
+class ManseCalendarIntegrated
+{
+    static readonly string[] Gan = { "갑","을","병","정","무","기","경","신","임","계" };
+    static readonly string[] Ji  = { "자","축","인","묘","진","사","오","미","신","유","술","해" };
+
+    // 24절기(입춘부터) 및 대응 황경(도)
+    static readonly string[] SolarTermNames = {
+        "입춘","우수","경칩","춘분","청명","곡우",
+        "입하","소만","망종","하지","소서","대서",
+        "입추","처서","백로","추분","한로","상강",
+        "입동","소설","대설","동지","소한","대한"
+    };
+    static readonly double[] SolarTermLongitudes = new double[] {
+        315,330,345,0,15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240,255,270,285,300
+    };
+
+    static void Main()
+    {
+        // 입력 샘플: 로컬 시각 + 타임존 오프셋
+        // 예: 2025-10-16 14:30, 한국 UTC+9
+        DateTime localInput = new DateTime(2025, 10, 16, 14, 30, 0, DateTimeKind.Unspecified);
+        TimeSpan tzOffset = TimeSpan.FromHours(9);
+
+        var result = ComputeManse(localInput, tzOffset);
+
+        Console.WriteLine($"입력(로컬) : {localInput:yyyy-MM-dd HH:mm} (UTC{tzOffset.TotalHours:+0;-0})");
+        Console.WriteLine($"UTC 시간   : {result.UtcTime:u}");
+        Console.WriteLine();
+
+        Console.WriteLine($"음력       : {result.LunarYear}년 {(result.IsLeapMonth ? "윤" : "")}{result.LunarMonth}월 {result.LunarDay}일");
+        Console.WriteLine($"년주       : {result.YearGanJi}");
+        Console.WriteLine($"월주       : {result.MonthGanJi}");
+        Console.WriteLine($"일주       : {result.DayGanJi}");
+        Console.WriteLine($"시주       : {result.HourGanJi}");
+        Console.WriteLine();
+        Console.WriteLine($"가장 가까운 절기 : {result.NearestSolarTermName}");
+        Console.WriteLine($"절기 시각 (UTC)  : {result.NearestSolarTermUtc:u}");
+        Console.WriteLine($"절기 시각 (Local) : {(result.NearestSolarTermUtc + tzOffset):yyyy-MM-dd HH:mm}");
+    }
+
+    class ManseResult
+    {
+        public DateTime UtcTime;
+        public int LunarYear, LunarMonth, LunarDay;
+        public bool IsLeapMonth;
+        public string YearGanJi, MonthGanJi, DayGanJi, HourGanJi;
+        public string NearestSolarTermName;
+        public DateTime NearestSolarTermUtc;
+    }
+
+    static ManseResult ComputeManse(DateTime localTime, TimeSpan tzOffset)
+    {
+        // Convert local input to UTC
+        DateTime utc = DateTime.SpecifyKind(localTime - tzOffset, DateTimeKind.Utc);
+
+        var res = new ManseResult { UtcTime = utc };
+
+        // 1) 음력 변환 (ChineseLunisolarCalendar 사용)
+        var cal = new ChineseLunisolarCalendar();
+        // ChineseLunisolarCalendar expects a DateTime with Kind=Unspecified or Local; using localTime is fine.
+        int lunarYear = cal.GetYear(localTime);
+        int lunarMonth = cal.GetMonth(localTime);
+        int lunarDay = cal.GetDayOfMonth(localTime);
+
+        int leapMonth = 0;
+        bool isLeap = false;
+        try
+        {
+            // GetLeapMonth(year, era) may throw if era not used; ChineseLunisolarCalendar.GetLeapMonth(int) overload doesn't exist in .NET,
+            // so use workaround: iterate months to detect leap (simpler)
+            // We'll check if any month number repeats (month > 12) by comparing ranges.
+            // Simpler approach: if GetMonthsInYear > 12 then there is a leap month; find it.
+            int monthsInYear = cal.GetMonthsInYear(lunarYear);
+            if (monthsInYear > 12)
+            {
+                // find which month is leap by scanning month start dates
+                for (int m = 1; m <= monthsInYear; m++)
+                {
+                    DateTime dt;
+                    try
+                    {
+                        dt = cal.ToDateTime(lunarYear, m, 1, 0, 0, 0, 0);
+                    }
+                    catch { continue; }
+                    int mm = cal.GetMonth(dt);
+                    if (mm == lunarMonth && m > 12) // a leap occurred
+                    {
+                        leapMonth = mm;
+                        break;
+                    }
+                }
+                isLeap = (leapMonth > 0 && lunarMonth == leapMonth);
+            }
+        }
+        catch
+        {
+            isLeap = false;
+        }
+
+        res.LunarYear = lunarYear;
+        res.LunarMonth = lunarMonth;
+        res.LunarDay = lunarDay;
+        res.IsLeapMonth = isLeap;
+
+        // 2) 절기들 계산(해당 연도 주변) — 정밀 Meeus 근사 + 이분법으로 시각 찾음
+        // We'll compute solar term times centered around this UTC (for safety compute terms for year-1, year, year+1)
+        int year = (utc).Year;
+        var termsPrev = GetSolarTermTimesForYear(year - 1);
+        var termsThis = GetSolarTermTimesForYear(year);
+        var termsNext = GetSolarTermTimesForYear(year + 1);
+
+        // Combine lists (sorted)
+        var allTerms = new System.Collections.Generic.List<(string name, DateTime utc, double lon)>();
+        allTerms.AddRange(termsPrev);
+        allTerms.AddRange(termsThis);
+        allTerms.AddRange(termsNext);
+        allTerms.Sort((a, b) => a.utc.CompareTo(b.utc));
+
+        // find nearest solar term by absolute time difference
+        DateTime bestUtc = allTerms[0].utc;
+        string bestName = allTerms[0].name;
+        double bestDiff = Math.Abs((allTerms[0].utc - utc).TotalSeconds);
+        foreach (var t in allTerms)
+        {
+            double diff = Math.Abs((t.utc - utc).TotalSeconds);
+            if (diff < bestDiff)
+            {
+                bestDiff = diff;
+                bestUtc = t.utc;
+                bestName = t.name;
+            }
+        }
+
+        res.NearestSolarTermName = bestName;
+        res.NearestSolarTermUtc = bestUtc;
+
+        // 3) 연간 간지 보정 (입춘 기준)
+        // Find the 입춘 (index 0 in array) instance that is the most recent before or equal to utc
+        DateTime recentIpchun = DateTime.MinValue;
+        foreach (var t in allTerms)
+        {
+            if (t.name == "입춘" && t.utc <= utc)
+            {
+                if (t.utc > recentIpchun) recentIpchun = t.utc;
+            }
+        }
+        int yearForGanJi;
+        if (recentIpchun == DateTime.MinValue)
+        {
+            // if none found before utc (rare), pick previous year's 입춘
+            var prevTerms = GetSolarTermTimesForYear(year - 1);
+            foreach (var t in prevTerms) if (t.name == "입춘") recentIpchun = t.utc;
+        }
+        // Traditional: if date >= 입춘 -> use the current solar-year's year number; else use previous.
+        DateTime ipchunOfThisSolarYear = DateTime.MinValue;
+        foreach (var t in allTerms)
+        {
+            if (t.name == "입춘")
+            {
+                // choose the 입춘 that lies in this Gregorian year or first after Jan 1
+                if (t.utc.Year == year || (t.utc.Year == year - 1 && utc.Month == 1))
+                {
+                    ipchunOfThisSolarYear = t.utc;
+                    break;
+                }
+            }
+        }
+        if (ipchunOfThisSolarYear == DateTime.MinValue)
+        {
+            // fallback: find the 입춘 nearest before utc in allTerms
+            foreach (var t in allTerms) if (t.name == "입춘" && t.utc <= utc) ipchunOfThisSolarYear = t.utc;
+            if (ipchunOfThisSolarYear == DateTime.MinValue)
+            {
+                // fallback to typical Feb 4 local
+                ipchunOfThisSolarYear = new DateTime(year, 2, 4, 0, 0, 0, DateTimeKind.Utc);
+            }
+        }
+
+        if (utc >= ipchunOfThisSolarYear)
+        {
+            yearForGanJi = utc.Year;
+        }
+        else
+        {
+            yearForGanJi = utc.Year - 1;
+        }
+        // But traditional ganji uses lunar year mapping; more robust is to compute GanJi index via (yearForGanJi - 4) % 60
+        res.YearGanJi = GetYearGanJiBySolarStart(yearForGanJi);
+
+        // 4) 월간 간지 (절기 기반)
+        // find index i such that utc >= term[i] and utc < term[i+1] in 'termsThis' combined (we use allTerms)
+        int termIdx = -1;
+        for (int i = 0; i < allTerms.Count - 1; i++)
+        {
+            if (utc >= allTerms[i].utc && utc < allTerms[i + 1].utc)
+            {
+                termIdx = i;
+                break;
+            }
+        }
+        if (termIdx == -1)
+        {
+            // fallback: choose nearest found bestUtc's index
+            for (int i = 0; i < allTerms.Count; i++)
+            {
+                if (allTerms[i].utc == bestUtc) { termIdx = i; break; }
+            }
+            if (termIdx == -1) termIdx = 0;
+        }
+        // locate which solar term index (0..23) it corresponds to (we used many years combined)
+        // find index in termsThis list (we need relative index starting from 입춘)
+        int nearestTermIndexInYear = -1;
+        for (int i = 0; i < termsThis.Count; i++)
+        {
+            if (termsThis[i].utc == bestUtc)
+            {
+                nearestTermIndexInYear = i;
+                break;
+            }
+        }
+        // But safer: determine the pair index inside the year by finding the latest term from termsThis that is <= utc
+        int latestIndexThis = -1;
+        for (int i = 0; i < termsThis.Count; i++)
+        {
+            if (termsThis[i].utc <= utc) latestIndexThis = i;
+        }
+        if (latestIndexThis == -1) latestIndexThis = 0;
+        // monthIndex (1..12) where 입춘 pair -> 1
+        int monthIndex = (latestIndexThis / 2) + 1;
+        if (monthIndex < 1) monthIndex = 1;
+        if (monthIndex > 12) monthIndex = 12;
+
+        res.MonthGanJi = GetMonthGanJi(res.YearGanJi, monthIndex);
+
+        // 5) 일간 간지 (60갑자) - using base date 1984-02-02 (갑자일) at UTC
+        res.DayGanJi = GetDayGanJi(utc);
+
+        // 6) 시간 간지 (시주) - compute based on local hour
+        res.HourGanJi = GetHourGanJi(res.DayGanJi, localTime.Hour);
+
+        return res;
+    }
+
+    // ----------------------------
+    // 간지 관련
+    // ----------------------------
+    static string GetYearGanJiBySolarStart(int solarYear)
+    {
+        // Compute GanJi using year number: traditional mapping uses (year - 4) -> 甲子 cycle start at 4 CE
+        int cyc = (solarYear - 4) % 60;
+        if (cyc < 0) cyc += 60;
+        int g = cyc % 10;
+        int j = cyc % 12;
+        return $"{Gan[g]}{Ji[j]}년";
+    }
+
+    static string GetMonthGanJi(string yearGanJi, int monthIndex)
+    {
+        // monthIndex: 1..12 where 1 corresponds to 寅月 (입춘 기준)
+        int yearGanIndex = Array.IndexOf(Gan, yearGanJi.Substring(0, 1));
+        if (yearGanIndex < 0) yearGanIndex = 0;
+        int ganIndex = (yearGanIndex * 2 + (monthIndex - 1)) % 10;
+        int jiIndex = (2 + (monthIndex - 1)) % 12; // 寅 index = 2 -> monthIndex 1 -> 寅
+        return $"{Gan[ganIndex]}{Ji[jiIndex]}월";
+    }
+
+    static string GetDayGanJi(DateTime utc)
+    {
+        DateTime baseDate = new DateTime(1984, 2, 2, 0, 0, 0, DateTimeKind.Utc); // 갑자일 기준
+        int diffDays = (int)Math.Floor((utc - baseDate).TotalDays);
+        int g = Mod(diffDays, 10);
+        int j = Mod(diffDays, 12);
+        return $"{Gan[g]}{Ji[j]}일";
+    }
+
+    static string GetHourGanJi(string dayGanJi, int localHour)
+    {
+        int hourIndex = (int)Math.Floor((localHour + 1) / 2.0) % 12; // 23~1 -> 0, 1~3 ->1 ...
+        int dayGanIndex = Array.IndexOf(Gan, dayGanJi.Substring(0,1));
+        if (dayGanIndex < 0) dayGanIndex = 0;
+        int ganIndex = (dayGanIndex * 2 + hourIndex) % 10;
+        return $"{Gan[ganIndex]}{Ji[hourIndex]}시";
+    }
+
+    static int Mod(int a, int m) { int r = a % m; if (r < 0) r += m; return r; }
+
+    // ----------------------------
+    // 절기(태양 황경) 계산 — Meeus 근사 + 이분법
+    // ----------------------------
+    static System.Collections.Generic.List<(string name, DateTime utc, double lon)> GetSolarTermTimesForYear(int year)
+    {
+        var list = new System.Collections.Generic.List<(string, DateTime, double)>();
+
+        // We'll compute each of the 24 terms by searching around an approximate date.
+        // For approximation, step roughly every 15.2 days from Jan 1.
+        DateTime jan1Utc = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        for (int k = 0; k < 24; k++)
+        {
+            double targetLon = SolarTermLongitudes[k]; // exact target longitude for term k
+            // approx center: jan1 + k * (365.2422 / 24) days
+            double approxDays = k * (365.2422 / 24.0);
+            DateTime approx = jan1Utc.AddDays(approxDays + 15); // shift a bit to make safe
+            DateTime found = FindSolarTermTimeAround(approx, targetLon);
+            double lon = SunEclipticLongitude(JulianDayFromDateTime(found));
+            list.Add((SolarTermNames[k], found, NormalizeAngle(lon)));
+        }
+
+        // sort by time (some terms may fall in prev/next year due to approx)
+        list.Sort((a, b) => a.utc.CompareTo(b.utc));
+        return list;
+    }
+
+    // Julian Day (UTC)
+    static double JulianDayFromDateTime(DateTime utc)
+    {
+        if (utc.Kind != DateTimeKind.Utc) utc = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        int Y = utc.Year;
+        int M = utc.Month;
+        double D = utc.Day + (utc.Hour + (utc.Minute + utc.Second / 60.0) / 60.0) / 24.0;
+        if (M <= 2) { Y -= 1; M += 12; }
+        int A = Y / 100;
+        int B = 2 - A + (A / 4);
+        double jd = Math.Floor(365.25 * (Y + 4716)) + Math.Floor(30.6001 * (M + 1)) + D + B - 1524.5;
+        return jd;
+    }
+
+    static double SunEclipticLongitude(double jd)
+    {
+        double T = (jd - 2451545.0) / 36525.0;
+        double L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T;
+        L0 = NormalizeAngle(L0);
+        double M = 357.52911 + 35999.05029 * T - 0.0001537 * T * T;
+        M = NormalizeAngle(M);
+        double Mrad = ToRad(M);
+        double C = (1.914602 - 0.004817 * T - 0.000014 * T * T) * Math.Sin(Mrad)
+                 + (0.019993 - 0.000101 * T) * Math.Sin(2 * Mrad)
+                 + 0.000289 * Math.Sin(3 * Mrad);
+        double trueLong = L0 + C;
+        double omega = 125.04 - 1934.136 * T;
+        double lambda = trueLong - 0.00569 - 0.00478 * Math.Sin(ToRad(omega));
+        return NormalizeAngle(lambda);
+    }
+
+    static double ToRad(double deg) => deg * Math.PI / 180.0;
+    static double NormalizeAngle(double ang)
+    {
+        double a = ang % 360.0;
+        if (a < 0) a += 360.0;
+        return a;
+    }
+
+    // find time near 'around' where sun longitude == targetLon using bisection within +/- span days
+    static DateTime FindSolarTermTimeAround(DateTime aroundUtc, double targetLon)
+    {
+        double spanDays = 4.0; // search +/- 4 days
+        DateTime left = aroundUtc.AddDays(-spanDays);
+        DateTime right = aroundUtc.AddDays(spanDays);
+
+        Func<DateTime, double> f = (dt) =>
+        {
+            double jd = JulianDayFromDateTime(dt);
+            double lon = SunEclipticLongitude(jd);
+            return AngleDifference(lon, targetLon); // signed difference -180..180
+        };
+
+        double fLeft = f(left);
+        double fRight = f(right);
+
+        // If same sign, expand window a few times
+        int expand = 0;
+        while (Math.Sign(fLeft) == Math.Sign(fRight) && expand < 6)
+        {
+            spanDays *= 2;
+            left = aroundUtc.AddDays(-spanDays);
+            right = aroundUtc.AddDays(spanDays);
+            fLeft = f(left);
+            fRight = f(right);
+            expand++;
+        }
+
+        // If still same sign, do linear search
+        if (Math.Sign(fLeft) == Math.Sign(fRight))
+        {
+            int steps = 240;
+            DateTime prev = left;
+            double prevVal = fLeft;
+            bool found = false;
+            for (int i = 1; i <= steps; i++)
+            {
+                DateTime cur = left.AddSeconds((right - left).TotalSeconds * i / steps);
+                double curVal = f(cur);
+                if (Math.Sign(curVal) != Math.Sign(prevVal))
+                {
+                    left = prev;
+                    right = cur;
+                    fLeft = prevVal;
+                    fRight = curVal;
+                    found = true;
+                    break;
+                }
+                prev = cur;
+                prevVal = curVal;
+            }
+            if (!found)
+            {
+                // fallback: return aroundUtc (should be rare)
+                return aroundUtc;
+            }
+        }
+
+        // bisection to ~1 second precision
+        for (int iter = 0; iter < 60; iter++)
+        {
+            DateTime mid = left.AddSeconds((right - left).TotalSeconds / 2.0);
+            double fMid = f(mid);
+            if (Math.Abs(fMid) < 1e-6) return mid; // very small
+            if (Math.Sign(fLeft) == Math.Sign(fMid))
+            {
+                left = mid;
+                fLeft = fMid;
+            }
+            else
+            {
+                right = mid;
+                fRight = fMid;
+            }
+        }
+        return left.AddSeconds((right - left).TotalSeconds / 2.0);
+    }
+
+    // signed smallest difference a-b in -180..+180
+    static double AngleDifference(double a, double b)
+    {
+        double d = a - b;
+        d = (d + 180.0) % 360.0;
+        if (d < 0) d += 360.0;
+        d -= 180.0;
+        return d;
+    }
+}
+
+
 중등부
 
 https://www.seoulfa.or.kr/bbs/board.php?bo_table=schedule&wr_id=298
