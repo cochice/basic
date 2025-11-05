@@ -23,3 +23,86 @@ foreach ($file in $files) {
 }
 
 Write-Host "`n총 $count 개 파일에서 BOM 제거 완료!" -ForegroundColor Green
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+using System;
+using System.IO;
+using System.Text;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        // 프로젝트 경로 설정
+        string projectPath = @"C:\YourProjectPath";  // 실제 경로로 변경하세요
+        
+        if (args.Length > 0)
+        {
+            projectPath = args[0];
+        }
+
+        if (!Directory.Exists(projectPath))
+        {
+            Console.WriteLine($"경로를 찾을 수 없습니다: {projectPath}");
+            return;
+        }
+
+        Console.WriteLine($"작업 시작: {projectPath}");
+        Console.WriteLine("EUC-KR → UTF-8 (without BOM) 변환 중...\n");
+
+        // EUC-KR 인코딩 등록 (필요시)
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        
+        // EUC-KR 인코딩
+        Encoding eucKr = Encoding.GetEncoding("euc-kr");
+        
+        // UTF-8 without BOM
+        UTF8Encoding utf8WithoutBom = new UTF8Encoding(false);
+
+        int successCount = 0;
+        int errorCount = 0;
+
+        // 모든 .java 파일 찾기
+        string[] javaFiles = Directory.GetFiles(projectPath, "*.java", SearchOption.AllDirectories);
+
+        foreach (string filePath in javaFiles)
+        {
+            try
+            {
+                // EUC-KR로 읽기
+                string content = File.ReadAllText(filePath, eucKr);
+                
+                // UTF-8 without BOM으로 쓰기
+                File.WriteAllText(filePath, content, utf8WithoutBom);
+                
+                Console.WriteLine($"✓ 변환 완료: {Path.GetFileName(filePath)}");
+                successCount++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"✗ 오류 발생: {Path.GetFileName(filePath)}");
+                Console.WriteLine($"  {ex.Message}");
+                errorCount++;
+            }
+        }
+
+        Console.WriteLine($"\n========================================");
+        Console.WriteLine($"작업 완료!");
+        Console.WriteLine($"성공: {successCount}개");
+        Console.WriteLine($"실패: {errorCount}개");
+        Console.WriteLine($"========================================");
+    }
