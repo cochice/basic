@@ -1,88 +1,25 @@
-2025-11-05 13:15:22,569 INFO  Root WebApplicationContext: initialization started
-2025-11-05 13:15:22,630 INFO  Refreshing org.springframework.web.context.support.XmlWebApplicationContext@7ed1cb6: display name [Root WebApplicationContext]; startup date [Wed Nov 05 13:15:22 KST 2025]; root of context hierarchy
-2025-11-05 13:15:22,730 INFO  Loading XML bean definitions from ServletContext resource [/WEB-INF/conf/applicationContext.xml]
-2025-11-05 13:15:23,168 INFO  Loading XML bean definitions from ServletContext resource [/WEB-INF/conf/sapContext.xml]
-2025-11-05 13:15:23,236 INFO  Loading XML bean definitions from ServletContext resource [/WEB-INF/conf/logic/ac-service.xml]
-2025-11-05 13:15:23,273 DEBUG Logging using commons-logging.
-2025-11-05 13:15:23,304 ERROR Context initialization failed
-org.springframework.beans.factory.BeanDefinitionStoreException: Unexpected exception parsing XML document from ServletContext resource [/WEB-INF/conf/logic/ac-service.xml]; nested exception is org.springframework.beans.FatalBeanException: Unable to create DWR bean creator for 'acTaxInvoiceFIManageService'.; nested exception is java.lang.ClassNotFoundException: com.sec.lps.ac.service.ACTaxInvoiceFIManageServiceImpl
-	at org.springframework.beans.factory.xml.XmlBeanDefinitionReader.doLoadBeanDefinitions(XmlBeanDefinitionReader.java:420)
-	at org.springframework.beans.factory.xml.XmlBeanDefinitionReader.loadBeanDefinitions(XmlBeanDefinitionReader.java:342)
-	at org.springframework.beans.factory.xml.XmlBeanDefinitionReader.loadBeanDefinitions(XmlBeanDefinitionReader.java:310)
-	at org.springframework.beans.factory.support.AbstractBeanDefinitionReader.loadBeanDefinitions(AbstractBeanDefinitionReader.java:143)
-	at org.springframework.beans.factory.support.AbstractBeanDefinitionReader.loadBeanDefinitions(AbstractBeanDefinitionReader.java:178)
-	at org.springframework.beans.factory.support.AbstractBeanDefinitionReader.loadBeanDefinitions(AbstractBeanDefinitionReader.java:149)
-	at org.springframework.web.context.support.XmlWebApplicationContext.loadBeanDefinitions(XmlWebApplicationContext.java:124)
-	at org.springframework.web.context.support.XmlWebApplicationContext.loadBeanDefinitions(XmlWebApplicationContext.java:92)
-	at org.springframework.context.support.AbstractRefreshableApplicationContext.refreshBeanFactory(AbstractRefreshableApplicationContext.java:123)
-	at org.springframework.context.support.AbstractApplicationContext.obtainFreshBeanFactory(AbstractApplicationContext.java:423)
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:353)
-	at org.springframework.web.context.ContextLoader.createWebApplicationContext(ContextLoader.java:255)
-	at org.springframework.web.context.ContextLoader.initWebApplicationContext(ContextLoader.java:199)
-	at org.springframework.web.context.ContextLoaderListener.contextInitialized(ContextLoaderListener.java:45)
-	at org.apache.catalina.core.StandardContext.listenerStart(StandardContext.java:4047)
-	at org.apache.catalina.core.StandardContext.startInternal(StandardContext.java:4489)
-	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:164)
-	at org.apache.catalina.core.ContainerBase.addChildInternal(ContainerBase.java:597)
-	at org.apache.catalina.core.ContainerBase.addChild(ContainerBase.java:569)
-	at org.apache.catalina.core.StandardHost.addChild(StandardHost.java:601)
-	at org.apache.catalina.startup.HostConfig.deployDescriptor(HostConfig.java:677)
-	at org.apache.catalina.startup.HostConfig$DeployDescriptor.run(HostConfig.java:1836)
-	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:511)
-	at java.util.concurrent.FutureTask.run$$$capture(FutureTask.java:266)
-	at java.util.concurrent.FutureTask.run(FutureTask.java)
-	at --- Async.Stack.Trace --- (captured by IntelliJ IDEA debugger)
-	at java.util.concurrent.FutureTask.<init>(FutureTask.java:151)
-	at java.util.concurrent.AbstractExecutorService.newTaskFor(AbstractExecutorService.java:87)
-	at java.util.concurrent.AbstractExecutorService.submit(AbstractExecutorService.java:111)
-	at org.apache.catalina.startup.HostConfig.deployDescriptors(HostConfig.java:572)
-	at org.apache.catalina.startup.HostConfig.deployApps(HostConfig.java:463)
-	at org.apache.catalina.startup.HostConfig.start(HostConfig.java:1576)
-	at org.apache.catalina.startup.HostConfig.lifecycleEvent(HostConfig.java:309)
-	at org.apache.catalina.util.LifecycleBase.fireLifecycleEvent(LifecycleBase.java:109)
-	at org.apache.catalina.util.LifecycleBase.setStateInternal(LifecycleBase.java:389)
-	at org.apache.catalina.util.LifecycleBase.setState(LifecycleBase.java:336)
-	at org.apache.catalina.core.ContainerBase.startInternal(ContainerBase.java:774)
-	at org.apache.catalina.core.StandardHost.startInternal(StandardHost.java:719)
-	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:164)
-	at org.apache.catalina.core.ContainerBase$StartChild.call(ContainerBase.java:1201)
-	at org.apache.catalina.core.ContainerBase$StartChild.call(ContainerBase.java:1191)
-	at java.util.concurrent.FutureTask.run$$$capture(FutureTask.java:266)
-	at java.util.concurrent.FutureTask.run(FutureTask.java)
-	at --- Async.Stack.Trace --- (captured by IntelliJ IDEA debugger)
-	at java.util.concurrent.FutureTask.<init>(FutureTask.java:132)
-	at java.util.concurrent.AbstractExecutorService.newTaskFor(AbstractExecutorService.java:102)
-	at java.util.concurrent.AbstractExecutorService.submit(AbstractExecutorService.java:133)
-	at org.apache.catalina.core.ContainerBase.startInternal(ContainerBase.java:747)
-	at org.apache.catalina.core.StandardEngine.startInternal(StandardEngine.java:209)
-	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:164)
-	at org.apache.catalina.core.StandardService.startInternal(StandardService.java:410)
-	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:164)
-	at org.apache.catalina.core.StandardServer.startInternal(StandardServer.java:872)
-	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:164)
-	at org.apache.catalina.startup.Catalina.start(Catalina.java:736)
-	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
-	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
-	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
-	at java.lang.reflect.Method.invoke(Method.java:498)
-	at org.apache.catalina.startup.Bootstrap.start(Bootstrap.java:342)
-	at org.apache.catalina.startup.Bootstrap.main(Bootstrap.java:473)
-Caused by: org.springframework.beans.FatalBeanException: Unable to create DWR bean creator for 'acTaxInvoiceFIManageService'.; nested exception is java.lang.ClassNotFoundException: com.sec.lps.ac.service.ACTaxInvoiceFIManageServiceImpl
-	at org.directwebremoting.spring.DwrNamespaceHandler$RemoteBeanDefinitionDecorator.decorate(DwrNamespaceHandler.java:342)
-	at org.springframework.beans.factory.xml.NamespaceHandlerSupport.decorate(NamespaceHandlerSupport.java:106)
-	at org.springframework.beans.factory.xml.BeanDefinitionParserDelegate.decorateIfRequired(BeanDefinitionParserDelegate.java:1284)
-	at org.springframework.beans.factory.xml.BeanDefinitionParserDelegate.decorateBeanDefinitionIfRequired(BeanDefinitionParserDelegate.java:1273)
-	at org.springframework.beans.factory.xml.DefaultBeanDefinitionDocumentReader.processBeanDefinition(DefaultBeanDefinitionDocumentReader.java:241)
-	at org.springframework.beans.factory.xml.DefaultBeanDefinitionDocumentReader.parseDefaultElement(DefaultBeanDefinitionDocumentReader.java:153)
-	at org.springframework.beans.factory.xml.DefaultBeanDefinitionDocumentReader.parseBeanDefinitions(DefaultBeanDefinitionDocumentReader.java:132)
-	at org.springframework.beans.factory.xml.DefaultBeanDefinitionDocumentReader.registerBeanDefinitions(DefaultBeanDefinitionDocumentReader.java:92)
-	at org.springframework.beans.factory.xml.XmlBeanDefinitionReader.registerBeanDefinitions(XmlBeanDefinitionReader.java:507)
-	at org.springframework.beans.factory.xml.XmlBeanDefinitionReader.doLoadBeanDefinitions(XmlBeanDefinitionReader.java:398)
-	... 60 more
-Caused by: java.lang.ClassNotFoundException: com.sec.lps.ac.service.ACTaxInvoiceFIManageServiceImpl
-	at org.apache.catalina.loader.WebappClassLoaderBase.loadClass(WebappClassLoaderBase.java:1351)
-	at org.apache.catalina.loader.WebappClassLoaderBase.loadClass(WebappClassLoaderBase.java:1160)
-	at org.springframework.util.ClassUtils.forName(ClassUtils.java:242)
-	at org.springframework.util.ClassUtils.forName(ClassUtils.java:195)
-	at org.directwebremoting.spring.DwrNamespaceHandler$RemoteBeanDefinitionDecorator.decorate(DwrNamespaceHandler.java:338)
-	... 69 more
+# Remove-BOM.ps1
+
+# Java 파일에서 BOM 제거
+$files = Get-ChildItem -Path . -Filter "*.java" -Recurse
+
+$count = 0
+$Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
+
+foreach ($file in $files) {
+    $content = Get-Content -Path $file.FullName -Raw -Encoding UTF8
+    
+    # BOM이 있는지 확인 (첫 문자가 \ufeff인지)
+    if ($content.Length -gt 0 -and $content[0] -eq [char]0xFEFF) {
+        Write-Host "BOM 제거 중: $($file.FullName)" -ForegroundColor Yellow
+        
+        # BOM 제거
+        $content = $content.Substring(1)
+        
+        # UTF-8 without BOM으로 저장
+        [System.IO.File]::WriteAllText($file.FullName, $content, $Utf8NoBomEncoding)
+        $count++
+    }
+}
+
+Write-Host "`n총 $count 개 파일에서 BOM 제거 완료!" -ForegroundColor Green
